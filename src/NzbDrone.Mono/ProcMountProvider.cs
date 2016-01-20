@@ -31,39 +31,55 @@ namespace NzbDrone.Mono
 
         public List<IMount> GetMounts()
         {
-            if (File.Exists(@"/proc/mounts"))
+            try
             {
-                var lines = File.ReadAllLines(@"/proc/mounts");
+                if (File.Exists(@"/proc/mounts"))
+                {
+                    var lines = File.ReadAllLines(@"/proc/mounts");
 
-                return lines.Select(ParseLine).OfType<IMount>().ToList();
+                    return lines.Select(ParseLine).OfType<IMount>().ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.DebugException("Failed to retrieve mounts from /proc/mounts", ex);
             }
 
             return new List<IMount>();
         }
 
-        private static Dictionary<string, bool> GetFileSystems()
+        private Dictionary<string, bool> GetFileSystems()
         {
             if (_fileSystems == null)
             {
                 var result = new Dictionary<string, bool>();
-                if (File.Exists(@"/proc/filesystems"))
+                try
                 {
-                    var lines = File.ReadAllLines(@"/proc/filesystems");
-
-                    foreach (var line in lines)
+                    if (File.Exists(@"/proc/filesystems"))
                     {
-                        var split = line.Split('\t');
+                        var lines = File.ReadAllLines(@"/proc/filesystems");
 
-                        result.Add(split[1], split[0] != "nodev");
+                        foreach (var line in lines)
+                        {
+                            var split = line.Split('\t');
+
+                            result.Add(split[1], split[0] != "nodev");
+                        }
                     }
                 }
-                else
+                catch (Exception ex)
+                {
+                    _logger.DebugException("Failed to get filesystem types from /proc/filesystems, using default set.", ex);
+                }
+                
+                if (result.Empty())
                 {
                     foreach (var type in _fixedTypes)
                     {
                         result.Add(type, true);
                     }
                 }
+
                 _fileSystems = result;
             }
 
@@ -119,53 +135,4 @@ namespace NzbDrone.Mono
             return result;
         }
     }
-
-    public class ProcMount : IMount
-    {
-        private readonly UnixDriveInfo _unixDriveInfo;
-
-        public ProcMount(DriveType driveType, string name, string mount, string type, Dictionary<string, string> options)
-        {
-            DriveType = driveType;
-            Name = name;
-            RootDirectory = mount;
-            DriveFormat = type;
-
-            _unixDriveInfo = new UnixDriveInfo(mount);
-        }
-
-        public long AvailableFreeSpace
-        {
-            get { return _unixDriveInfo.AvailableFreeSpace; }
-        }
-
-        public string DriveFormat { get; private set; }
-
-        public DriveType DriveType { get; private set; }
-
-        public bool IsReady
-        {
-            get { return _unixDriveInfo.IsReady; }
-        }
-
-        public string Name { get; private set; }
-
-        public string RootDirectory { get; private set; }
-
-        public long TotalFreeSpace
-        {
-            get { return _unixDriveInfo.TotalFreeSpace; }
-        }
-
-        public long TotalSize
-        {
-            get { return _unixDriveInfo.TotalSize; }
-        }
-
-        public string VolumeLabel
-        {
-            get { return _unixDriveInfo.VolumeLabel; }
-        }
-    }
-
 }
